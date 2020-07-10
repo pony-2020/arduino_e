@@ -1,0 +1,211 @@
+#include "Keypad.h"
+#include <Wire.h>
+#include "dht11.h"
+#include "LiquidCrystal_I2C.h"
+#include "TM1637.h"
+#include "Adafruit_Keypad.h"
+#include <stdio.h>
+
+#define   CLK     A3
+#define   DIO     A2
+#define   COL_1   7
+#define   COL_2   6
+#define   COL_3   5
+#define   COL_4   4
+#define   ROW_1   11
+#define   ROW_2   10
+#define   ROW_3   9
+#define   ROW_4   8
+#define  DHT11PIN 13  
+#define   ADPIN   A0
+#define    pin    3 //lamb
+const byte ROWS = 4; //four rows
+const byte COLS = 4; //four columns
+
+char hexaKeys[ROWS][COLS] = {
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
+};
+int flag=-1;
+int8_t rowPins[ROWS] = {ROW_1, ROW_2, ROW_3, ROW_4};
+int8_t colPins[COLS] = {COL_1, COL_2, COL_3, COL_4};
+int8_t Disp[]  = {0, 0, 0, 0};
+int    value   = 0 ;
+float  voltage = 0.0 ;
+int chk;
+Keypad customKeypad = Keypad(makeKeymap(hexaKeys),rowPins, colPins, ROWS, COLS);
+dht11 DHT11;
+TM1637 _4Segment_Display(CLK, DIO);
+LiquidCrystal_I2C lcd(0x3F, 16, 2);
+void setup()
+{
+    //串口通信初始化
+    Serial.begin(9600);
+    //数字键盘IO端口初始化
+    for(int i=0 ; i< ROWS ; i++){
+        pinMode(rowPins[i],OUTPUT);
+        pinMode(colPins[i],OUTPUT);
+    }
+    pinMode(pin,OUTPUT);
+    digitalWrite(pin,LOW);
+    //温度IO端口初始化
+    pinMode(DHT11PIN, OUTPUT);
+    //AD转换IO端口初始化
+    pinMode(ADPIN,INPUT);
+    //串行LCD动态显示屏初始化
+    lcd.init();
+    lcd.backlight();
+    //4个数码管初始化
+    _4Segment_Display.set();
+    _4Segment_Display.init();
+    _4Segment_Display.point(POINT_OFF);
+}
+void loop()
+{
+  int flag1=0;
+  float times=0;
+  char customKey;
+  while (flag==-1){
+          lcd.setCursor(0, 0);
+          lcd.print("press any key to");
+          lcd.setCursor(0, 1);
+          lcd.print("continue...");
+          customKey = customKeypad.getKey();
+          if (customKey){lcd.clear();flag=0;}
+  }
+    if (!flag){
+        lcd.setCursor(0, 0);
+        lcd.print("Select function");
+        lcd.setCursor(0, 1);
+        lcd.print("A.V  B.T C.L");
+    }
+    customKey = customKeypad.getKey();
+    if(customKey)
+    {
+      switch(customKey)
+      {
+       case 'A':
+           lcd.clear();
+           lcd.setCursor(0, 0);
+           lcd.print("Select range:");
+           lcd.setCursor(0, 1);
+           lcd.print("A.5 B.3 C.2.56");
+           flag=2;
+           while(1)
+           {
+             customKey= customKeypad.getKey();
+                switch(customKey)
+                  {
+                     case 'A':
+                         analogReference(DEFAULT);
+                         times=4.888;    
+                         flag1=1;
+                         break;
+                     case 'B':
+                         analogReference(EXTERNAL);
+                         times=2.930;     
+                         flag1=1;
+                         break;
+                     case 'C':
+                         analogReference(INTERNAL);
+                         times=2.502;    
+                         flag1=1;
+                         break;
+                     default:
+                        break;   
+                  } 
+                        if(flag1) break;
+           }
+             lcd.clear();
+             lcd.setCursor(0, 0);
+             lcd.print("press '*' back"); 
+           while(1){
+              value = analogRead(ADPIN);
+              voltage=value*times;
+              Serial.print("get ad pin value "); 
+              Serial.print(value);
+              Serial.println("\n voltage =  ");
+              Serial.println(voltage);
+             Disp[0]=(int)voltage/1000;
+             Disp[1]=(int)voltage/100%10;
+             Disp[2]=(int)voltage%100/10;
+             Disp[3]=(int)voltage%10;
+              _4Segment_Display.display(Disp);
+              delay(1000);
+             customKey= customKeypad.getKey();
+            if( customKey=='*'){flag=0;break;}
+           }
+            break;
+      case 'B':
+            flag=3;
+              lcd.clear();
+              lcd.setCursor(0, 0);
+             lcd.print("press '*' back");
+            while(1){
+                chk = DHT11.read(DHT11PIN);
+                 lcd.setCursor(0, 1);
+                 lcd.print("T: ");
+               lcd.print((float)DHT11.temperature, 2);
+              lcd.print(" H: ");
+               lcd.print((float)DHT11.humidity, 2);
+                customKey = customKeypad.getKey(); 
+                 if( customKey =='*'){flag=0;  lcd.clear();break;}
+            }
+             break;
+      case 'C':
+                 lcd.clear();
+                  lcd.setCursor(0, 0);
+                  lcd.print("input A/a on");
+                    lcd.setCursor(0, 1);
+                  lcd.print("input B/b off");
+              while(1)
+              {
+              if(Serial.available()>0)
+              {
+                char ch = Serial.read();
+                if(ch=='a'||ch=='A')
+                {
+                  digitalWrite(pin,HIGH);
+                  Serial.println("turn  on");
+                  lcd.clear();
+                  lcd.setCursor(0, 0);
+                  lcd.print("press '*' back"); 
+                  lcd.setCursor(0, 1);
+                  lcd.print("turn on"); 
+                }
+                else if (ch=='b'||ch=='B')
+                {
+                  digitalWrite(pin,LOW);
+                  Serial.println("turn off");
+                  lcd.clear();
+                  lcd.setCursor(0, 0);
+                  lcd.print("press '*' back"); 
+                  lcd.setCursor(0, 1);
+                  lcd.print("turn off"); 
+                }
+              }
+              customKey = customKeypad.getKey(); 
+                 if( customKey =='*')
+                 {
+                  flag=0; 
+                 lcd.clear();
+                 digitalWrite(pin,LOW);
+                 break;
+                }
+            }
+            break;
+      default:
+           lcd.clear();
+           lcd.setCursor(0, 0);
+           lcd.print("wrong key");
+           lcd.setCursor(0, 1);
+           lcd.print("try again");
+           flag=0;
+           delay(2000);
+           lcd.clear();
+            break;
+       }   
+    }
+  } 
